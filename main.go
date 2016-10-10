@@ -180,7 +180,7 @@ func main() {
 						time.Sleep(1 * time.Second)
 						err = os.RemoveAll(srcPath)
 					}
-					done <- 1
+					close(done)
 				}()
 			} else {
 				close(done)
