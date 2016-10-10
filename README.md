@@ -16,3 +16,8 @@ go build
 # 查看用法
 find2 -h
 ```
+example:
+```
+./find2 -findPath ./www -fileRule \.php$ -contentRule "a\.user|a\.profile" -savePath ./found -compress true
+```
+本例中，压缩后的文件保存在"./found/compress.zip"。
