@@ -170,8 +170,10 @@ func main() {
 	if err == nil && *model.CmdOptions.CompressSave {
 		srcPath := filepath.Join(*model.CmdOptions.SaveToPath, `_tmp`)
 		savePath := filepath.Join(*model.CmdOptions.SaveToPath, `compress.zip`)
+		log.Info(`Compressed ` + srcPath + ` and save to ` + savePath + `.`)
 		_, err = model.Zip(srcPath, savePath)
 		if err == nil {
+			log.Info(`Delete ` + srcPath + `.`)
 			err = os.RemoveAll(srcPath)
 			if err != nil {
 				go func() {
