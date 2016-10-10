@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -20,8 +20,7 @@ func main() {
 	model.CmdOptions.DefineFlag()
 	flag.Parse()
 	log.Sync()
-	//
-	log.Info(*model.CmdOptions.TargetFilePath, `----`)
+
 	var regexpFileName, regexpContent, regexpIgnoreFile *regexp.Regexp
 	if model.CmdOptions.TargetFileRule != nil && len(*model.CmdOptions.TargetFileRule) > 0 {
 		regexpFileName = regexp.MustCompile(*model.CmdOptions.TargetFileRule)
@@ -69,8 +68,21 @@ func main() {
 			}
 		}
 	}
-	err := filepath.Walk(*model.CmdOptions.TargetFilePath, func(path string, info os.FileInfo, err error) error {
-		nameBytes := []byte(info.Name())
+	if model.CmdOptions.TargetFilePath == nil || len(*model.CmdOptions.TargetFilePath) == 0 {
+		s := `./`
+		model.CmdOptions.TargetFilePath = &s
+	}
+	root, err := filepath.Abs(*model.CmdOptions.TargetFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Info(`Scan dir: `, root)
+	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		name := info.Name()
+		nameBytes := []byte(name)
 		if info.IsDir() {
 			if regexpIgnoreFile != nil && regexpIgnoreFile.Match(nameBytes) {
 				return filepath.SkipDir
@@ -84,34 +96,101 @@ func main() {
 		if regexpFileName != nil && !regexpFileName.Match(nameBytes) {
 			return nil
 		}
+		savePath := *model.CmdOptions.SaveToPath
 		if regexpContent != nil {
 			b, err := ioutil.ReadFile(path)
 			if err != nil {
 				return err
 			}
-			b = regexpContent.ReplaceAll(b, replaceWithBytes)
-
-		}
-		saveAs := strings.TrimPrefix(path, root)
-		saveAs = filepath.Join(save, saveAs)
-		err = os.MkdirAll(filepath.Dir(saveAs), os.ModePerm)
-		if err == nil {
-			file, err := os.Create(saveAs)
-			if err == nil {
-				_, err = file.WriteString(content)
+			if *model.CmdOptions.ReplaceMode {
+				b = regexpContent.ReplaceAll(b, replaceWithBytes)
+			} else {
+				if !regexpContent.Match(b) {
+					return nil
+				}
 			}
+			b = doFn(b)
+
+			if len(savePath) == 0 && !*model.CmdOptions.CompressSave { //如果没有指定另存路径,且不需要压缩保存修改后的文件，则覆盖原文件
+				savePath = path
+			} else {
+				if *model.CmdOptions.CompressSave {
+					savePath = filepath.Join(savePath, `_tmp`)
+					err := os.MkdirAll(savePath, os.ModePerm)
+					if err != nil {
+						return err
+					}
+				}
+				filePath := strings.TrimPrefix(path, root)
+				savePath = filepath.Join(savePath, filePath)
+				err := os.MkdirAll(filepath.Dir(savePath), os.ModePerm)
+				if err != nil {
+					return err
+				}
+			}
+			log.Info(`Modified ` + path + ` and save to ` + savePath + `.`)
+			err = ioutil.WriteFile(savePath, b, os.ModePerm)
+			if err != nil {
+				return err
+			}
+		} else if len(savePath) > 0 || *model.CmdOptions.CompressSave { //不需要访问内容，直接拷贝文件
+			if *model.CmdOptions.CompressSave {
+				savePath = filepath.Join(savePath, `_tmp`)
+				err := os.MkdirAll(savePath, os.ModePerm)
+				if err != nil {
+					return err
+				}
+			}
+			filePath := strings.TrimPrefix(root, path)
+			savePath = filepath.Join(savePath, filePath)
+			err := os.MkdirAll(filepath.Dir(savePath), os.ModePerm)
+			if err != nil {
+				return err
+			}
+			sr, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer sr.Close()
+
+			dw, err := os.Create(savePath)
+			if err != nil {
+				return err
+			}
+			defer dw.Close()
+
+			if _, err = io.Copy(dw, sr); err != nil {
+				return err
+			}
+			log.Info(`Copy ` + path + ` to ` + savePath + `.`)
 		}
-		if err != nil {
-			return err
-		}
-		fmt.Println(`Autofix ` + path + `.`)
 		return nil
 	})
-
-	defer time.Sleep(5 * time.Minute)
-	if err != nil {
-		fmt.Println(err)
-		return
+	done := make(chan int)
+	if err == nil && *model.CmdOptions.CompressSave {
+		srcPath := filepath.Join(*model.CmdOptions.SaveToPath, `_tmp`)
+		savePath := filepath.Join(*model.CmdOptions.SaveToPath, `compress.zip`)
+		_, err = model.Zip(srcPath, savePath)
+		if err == nil {
+			err = os.RemoveAll(srcPath)
+			if err != nil {
+				go func() {
+					for i := 1; err != nil && i < 10; i++ {
+						log.Error(err)
+						time.Sleep(1 * time.Second)
+						err = os.RemoveAll(srcPath)
+					}
+					done <- 1
+				}()
+			} else {
+				close(done)
+			}
+		}
 	}
-	fmt.Println(`Autofix complete.`)
+
+	if err != nil {
+		log.Error(err)
+	}
+	log.Info(`Find complete.`)
+	<-done
 }
