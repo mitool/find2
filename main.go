@@ -77,122 +77,129 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Info(`Scan dir: `, root)
-	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	//单纯压缩指定文件
+	if regexpContent == nil && *model.CmdOptions.CompressSave {
+		if len(*model.CmdOptions.SaveToPath) == 0 {
+			*model.CmdOptions.SaveToPath = `./`
+		}
+		savePath := filepath.Join(*model.CmdOptions.SaveToPath, `compress.zip`)
+		log.Info(`Compressed ` + *model.CmdOptions.TargetFilePath + ` and save to ` + savePath + `.`)
+		_, err = model.Zip(*model.CmdOptions.TargetFilePath, savePath, regexpFileName, regexpIgnoreFile)
 		if err != nil {
-			return err
+			log.Error(err)
 		}
-		name := info.Name()
-		nameBytes := []byte(name)
-		if info.IsDir() {
-			if regexpIgnoreFile != nil && regexpIgnoreFile.Match(nameBytes) {
-				return filepath.SkipDir
-			}
-			return nil
-		} else if regexpIgnoreFile != nil {
-			if regexpIgnoreFile.Match(nameBytes) {
-				return nil
-			}
-		}
-		if regexpFileName != nil && !regexpFileName.Match(nameBytes) {
-			return nil
-		}
-		savePath := *model.CmdOptions.SaveToPath
-		if regexpContent != nil {
-			b, err := ioutil.ReadFile(path)
+		log.Info(`Compression is completed.`)
+	} else {
+		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
-			if *model.CmdOptions.ReplaceMode {
-				b = regexpContent.ReplaceAll(b, replaceWithBytes)
-			} else {
-				if !regexpContent.Match(b) {
+			name := info.Name()
+			nameBytes := []byte(name)
+			if info.IsDir() {
+				if regexpIgnoreFile != nil && regexpIgnoreFile.Match(nameBytes) {
+					return filepath.SkipDir
+				}
+				return nil
+			} else if regexpIgnoreFile != nil {
+				if regexpIgnoreFile.Match(nameBytes) {
 					return nil
 				}
 			}
-			b = doFn(b)
+			if regexpFileName != nil && !regexpFileName.Match(nameBytes) {
+				return nil
+			}
+			savePath := *model.CmdOptions.SaveToPath
+			if regexpContent != nil {
+				b, err := ioutil.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				if *model.CmdOptions.ReplaceMode {
+					b = regexpContent.ReplaceAll(b, replaceWithBytes)
+				} else {
+					if !regexpContent.Match(b) {
+						return nil
+					}
+				}
+				b = doFn(b)
 
-			if len(savePath) == 0 && !*model.CmdOptions.CompressSave { //如果没有指定另存路径,且不需要压缩保存修改后的文件，则覆盖原文件
-				savePath = path
-			} else {
-				if *model.CmdOptions.CompressSave {
-					savePath = filepath.Join(savePath, `_tmp`)
-					err := os.MkdirAll(savePath, os.ModePerm)
+				if len(savePath) == 0 && !*model.CmdOptions.CompressSave { //如果没有指定另存路径,且不需要压缩保存修改后的文件，则覆盖原文件
+					savePath = path
+				} else {
+					if *model.CmdOptions.CompressSave {
+						savePath = filepath.Join(savePath, `_tmp`)
+						err := os.MkdirAll(savePath, os.ModePerm)
+						if err != nil {
+							return err
+						}
+					}
+					filePath := strings.TrimPrefix(path, root)
+					savePath = filepath.Join(savePath, filePath)
+					err := os.MkdirAll(filepath.Dir(savePath), os.ModePerm)
 					if err != nil {
 						return err
 					}
 				}
-				filePath := strings.TrimPrefix(path, root)
+				log.Info(`Modified ` + path + ` and save to ` + savePath + `.`)
+				err = ioutil.WriteFile(savePath, b, os.ModePerm)
+				if err != nil {
+					return err
+				}
+			} else if len(savePath) > 0 { //不需要访问内容，直接拷贝文件
+				filePath := strings.TrimPrefix(root, path)
 				savePath = filepath.Join(savePath, filePath)
 				err := os.MkdirAll(filepath.Dir(savePath), os.ModePerm)
 				if err != nil {
 					return err
 				}
-			}
-			log.Info(`Modified ` + path + ` and save to ` + savePath + `.`)
-			err = ioutil.WriteFile(savePath, b, os.ModePerm)
-			if err != nil {
-				return err
-			}
-		} else if len(savePath) > 0 || *model.CmdOptions.CompressSave { //不需要访问内容，直接拷贝文件
-			if *model.CmdOptions.CompressSave {
-				savePath = filepath.Join(savePath, `_tmp`)
-				err := os.MkdirAll(savePath, os.ModePerm)
+				sr, err := os.Open(path)
 				if err != nil {
 					return err
 				}
-			}
-			filePath := strings.TrimPrefix(root, path)
-			savePath = filepath.Join(savePath, filePath)
-			err := os.MkdirAll(filepath.Dir(savePath), os.ModePerm)
-			if err != nil {
-				return err
-			}
-			sr, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer sr.Close()
+				defer sr.Close()
 
-			dw, err := os.Create(savePath)
-			if err != nil {
-				return err
-			}
-			defer dw.Close()
+				dw, err := os.Create(savePath)
+				if err != nil {
+					return err
+				}
+				defer dw.Close()
 
-			if _, err = io.Copy(dw, sr); err != nil {
-				return err
+				if _, err = io.Copy(dw, sr); err != nil {
+					return err
+				}
+				log.Info(`Copy ` + path + ` to ` + savePath + `.`)
 			}
-			log.Info(`Copy ` + path + ` to ` + savePath + `.`)
-		}
-		return nil
-	})
-	done := make(chan int)
-	if err == nil && *model.CmdOptions.CompressSave {
-		srcPath := filepath.Join(*model.CmdOptions.SaveToPath, `_tmp`)
-		savePath := filepath.Join(*model.CmdOptions.SaveToPath, `compress.zip`)
-		log.Info(`Compressed ` + srcPath + ` and save to ` + savePath + `.`)
-		_, err = model.Zip(srcPath, savePath)
-		if err == nil {
-			log.Info(`Delete ` + srcPath + `.`)
-			err = os.RemoveAll(srcPath)
-			if err != nil {
-				go func() {
-					for i := 1; err != nil && i < 10; i++ {
-						log.Error(err)
-						time.Sleep(1 * time.Second)
-						err = os.RemoveAll(srcPath)
-					}
+			return nil
+		})
+		done := make(chan int)
+		if err == nil && *model.CmdOptions.CompressSave {
+			srcPath := filepath.Join(*model.CmdOptions.SaveToPath, `_tmp`)
+			savePath := filepath.Join(*model.CmdOptions.SaveToPath, `compress.zip`)
+			log.Info(`Compressed ` + srcPath + ` and save to ` + savePath + `.`)
+			_, err = model.Zip(srcPath, savePath)
+			if err == nil {
+				log.Info(`Delete ` + srcPath + `.`)
+				err = os.RemoveAll(srcPath)
+				if err != nil {
+					go func() {
+						for i := 1; err != nil && i < 10; i++ {
+							log.Error(err)
+							time.Sleep(1 * time.Second)
+							err = os.RemoveAll(srcPath)
+						}
+						close(done)
+					}()
+				} else {
 					close(done)
-				}()
-			} else {
-				close(done)
+				}
 			}
 		}
-	}
 
-	if err != nil {
-		log.Error(err)
+		if err != nil {
+			log.Error(err)
+		}
+		log.Info(`Find complete.`)
+		<-done
 	}
-	log.Info(`Find complete.`)
-	<-done
 }

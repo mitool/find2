@@ -21,3 +21,8 @@ example:
 ./find2 -findPath ./www -fileRule \.php$ -contentRule "a\.user|a\.profile" -savePath ./found -compress true
 ```
 本例中，压缩后的文件保存在"./found/compress.zip"。
+
+## 用参数组合实现特定功能
+1. 如果不设置`-contentRule`,并且设置`-compress`为`true`,则会将符合规则的文件添加到zip压缩包。
+2. 如果不设置`-contentRule`,并且设置`-compress`为`false`或者不设置,则会将符合规则的文件复制到`-savePath`指定的目录中，
+如果不指定`-savePath`的值则复制到当前目录中。
