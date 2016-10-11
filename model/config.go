@@ -16,6 +16,7 @@ type Options struct {
 	CompressSave    *bool   //是否保存为压缩文件
 	ConvertEncoding *string //转换编码(例如：utf-8->gbk，也可以采用"->gbk"来自动确认原始文件的编码)
 	ReplaceMode     *bool
+	RestoreVer      *string
 }
 
 func (o *Options) DefineFlag() {
@@ -28,4 +29,5 @@ func (o *Options) DefineFlag() {
 	o.CompressSave = flag.Bool(`compress`, false, `是否将文件保存为压缩包`)
 	o.ConvertEncoding = flag.String(`convertEncoding`, ``, `内容编码转换(例如：utf-8->gbk，也可以采用"->gbk"来自动确认原始文件的编码)`)
 	o.ReplaceMode = flag.Bool(`replace`, false, `是否替换`)
+	o.RestoreVer = flag.String(`restore`, ``, `还原备份文件`)
 }

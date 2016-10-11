@@ -77,6 +77,7 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Info(`Scan dir: `, root)
+	timeString := time.Now().Format(`20060102150405`)
 	//单纯压缩指定文件
 	if regexpContent == nil && *model.CmdOptions.CompressSave {
 		if len(*model.CmdOptions.SaveToPath) == 0 {
@@ -89,6 +90,25 @@ func main() {
 			log.Error(err)
 		}
 		log.Info(`Compression is completed.`)
+	} else if model.CmdOptions.RestoreVer != nil && len(*model.CmdOptions.RestoreVer) > 0 {
+		regexpRestoreFile := regexp.MustCompile(`\.` + regexp.QuoteMeta(*model.CmdOptions.RestoreVer) + `\.fbak$`)
+		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			nameBytes := []byte(info.Name())
+			if !regexpRestoreFile.Match(nameBytes) {
+				return nil
+			}
+			original := strings.TrimSuffix(info.Name(), `.`+*model.CmdOptions.RestoreVer+`.fbak`)
+			os.Remove(original)
+			log.Info(`Restore ` + original + ` from ` + path + `.`)
+			return err
+		})
+		log.Info(`Restore file is completed.`)
 	} else {
 		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -123,9 +143,10 @@ func main() {
 					}
 				}
 				b = doFn(b)
-
+				writeOriginalFile := false
 				if len(savePath) == 0 && !*model.CmdOptions.CompressSave { //如果没有指定另存路径,且不需要压缩保存修改后的文件，则覆盖原文件
 					savePath = path
+					writeOriginalFile = true
 				} else {
 					if *model.CmdOptions.CompressSave {
 						savePath = filepath.Join(savePath, `_tmp`)
@@ -142,6 +163,13 @@ func main() {
 					}
 				}
 				log.Info(`Modified ` + path + ` and save to ` + savePath + `.`)
+				if writeOriginalFile {
+					//写原始文件时，先备份
+					err = os.Rename(path, path+`.`+timeString+`.fbak`)
+					if err != nil {
+						return err
+					}
+				}
 				err = ioutil.WriteFile(savePath, b, os.ModePerm)
 				if err != nil {
 					return err

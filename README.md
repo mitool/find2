@@ -25,4 +25,6 @@ example:
 ## 用参数组合实现特定功能
 1. 如果不设置`-contentRule`,并且设置`-compress`为`true`,则会将符合规则的文件添加到zip压缩包。
 2. 如果不设置`-contentRule`,并且设置`-compress`为`false`或者不设置,则会将符合规则的文件复制到`-savePath`指定的目录中，
-如果不指定`-savePath`的值则复制到当前目录中。
+   如果不指定`-savePath`的值则复制到当前目录中。
+3. 如果设置了`-contentRule`但没有设置`-savePath`时,则会直接修改原文件并将原始文件保存一份备份。
+   可以用`./find2 -restore 20161006093020`还原指定时间的备份。 
