@@ -17,6 +17,7 @@ type Options struct {
 	ConvertEncoding *string //转换编码(例如：utf-8->gbk，也可以采用"->gbk"来自动确认原始文件的编码)
 	ReplaceMode     *bool
 	RestoreVer      *string
+	ClearBackup     *bool
 }
 
 func (o *Options) DefineFlag() {
@@ -30,4 +31,5 @@ func (o *Options) DefineFlag() {
 	o.ConvertEncoding = flag.String(`convertEncoding`, ``, `内容编码转换(例如：utf-8->gbk，也可以采用"->gbk"来自动确认原始文件的编码)`)
 	o.ReplaceMode = flag.Bool(`replace`, false, `是否替换`)
 	o.RestoreVer = flag.String(`restore`, ``, `还原备份文件`)
+	o.ClearBackup = flag.Bool(`clearBackup`, false, `删除所有备份文件`)
 }

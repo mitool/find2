@@ -90,7 +90,7 @@ func main() {
 			log.Error(err)
 		}
 		log.Info(`Compression is completed.`)
-	} else if model.CmdOptions.RestoreVer != nil && len(*model.CmdOptions.RestoreVer) > 0 {
+	} else if model.CmdOptions.RestoreVer != nil && len(*model.CmdOptions.RestoreVer) > 0 { //还原备份文件
 		regexpRestoreFile := regexp.MustCompile(`\.` + regexp.QuoteMeta(*model.CmdOptions.RestoreVer) + `\.fbak$`)
 		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -109,6 +109,23 @@ func main() {
 			return err
 		})
 		log.Info(`Restore file is completed.`)
+	} else if model.CmdOptions.ClearBackup != nil && *model.CmdOptions.ClearBackup { //删除所有备份文件
+		regexpRestoreFile := regexp.MustCompile(`\.[0-9]+\.fbak$`)
+		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			nameBytes := []byte(info.Name())
+			if !regexpRestoreFile.Match(nameBytes) {
+				return nil
+			}
+			log.Info(`Removed ` + path + `.`)
+			return os.Remove(path)
+		})
+		log.Info(`Backup file is removed.`)
 	} else {
 		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
