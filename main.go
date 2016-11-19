@@ -218,6 +218,7 @@ func main() {
 			return nil
 		})
 		done := make(chan int)
+		block := false
 		if err == nil && *model.CmdOptions.CompressSave {
 			srcPath := filepath.Join(*model.CmdOptions.SaveToPath, `_tmp`)
 			savePath := filepath.Join(*model.CmdOptions.SaveToPath, `compress.zip`)
@@ -227,6 +228,7 @@ func main() {
 				log.Info(`Delete ` + srcPath + `.`)
 				err = os.RemoveAll(srcPath)
 				if err != nil {
+					block = true
 					go func() {
 						for i := 1; err != nil && i < 10; i++ {
 							log.Error(err)
@@ -235,8 +237,6 @@ func main() {
 						}
 						close(done)
 					}()
-				} else {
-					close(done)
 				}
 			}
 		}
@@ -245,6 +245,8 @@ func main() {
 			log.Error(err)
 		}
 		log.Info(`Find complete.`)
-		<-done
+		if block {
+			<-done
+		}
 	}
 }
